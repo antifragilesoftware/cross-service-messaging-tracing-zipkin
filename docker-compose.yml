@@ -1,0 +1,83 @@
+version: '2'
+
+networks:
+  micronet:
+
+services:
+
+  consul1:
+    image: gliderlabs/consul
+    container_name: consul1
+    ports:
+     - "8400:8400"
+     - "8500:8500"
+     - "8600:8600/udp"
+    networks:
+      - micronet
+    command: ["agent", "-server", "-bootstrap-expect=1", "-data-dir=/tmp/consul", "-node=consul1", "-client=0.0.0.0", "-ui"]
+
+  microservice1:
+    image: antifragilesoftware/simple-boot-message-sending-traceable-zipkin-microservice
+    container_name: microservice1
+    ports:
+     - "8080:8080"
+    depends_on:
+     - consul1
+     - query
+     - web
+    networks:
+      - micronet
+    command: ["java","--spring.cloud.consul.host=consul1","-Djava.security.egd=file:/dev/./urandom","-jar","/microservice.jar"]
+
+  microserviceconsumer:
+    image: antifragilesoftware/simple-boot-traceable-zipkin-microservice-consumer
+    container_name: microserviceconsumer
+    ports:
+     - "8090:8080"
+    depends_on:
+     - consul1
+     - query
+     - web
+    networks:
+      - micronet
+    command: ["java","--spring.cloud.consul.host=consul1","-Djava.security.egd=file:/dev/./urandom","-jar","/microservice.jar"]
+
+  storage:
+    image: openzipkin/zipkin-cassandra:1.39.0
+    container_name: cassandra
+    ports:
+      - 9042:9042
+
+  # The query process services the UI, and also exposes a POST endpoint that
+  # instrumentation can send trace data to.
+  query:
+    image: openzipkin/zipkin-query:1.39.0
+    container_name: query
+    environment:
+      # Remove TRANSPORT_TYPE to disable tracing
+      - TRANSPORT_TYPE=http
+      - STORAGE_TYPE=cassandra
+      # Point the query service at the storage backend
+      - CASSANDRA_CONTACT_POINTS=cassandra
+    ports:
+      # The http api is mounted at /api/v1
+      - 9411:9411
+      # Admin interface is under the http path /admin
+      # https://twitter.github.io/twitter-server/Features.html#http-admin-interface
+      - 9901:9901
+    depends_on:
+      - storage
+
+  web:
+    image: openzipkin/zipkin-web:1.39.0
+    environment:
+      # Remove TRANSPORT_TYPE to disable tracing
+      - TRANSPORT_TYPE=http
+      # Point the web service at the query backend
+      - QUERY_ADDR=query:9411
+    ports:
+      # Web UI is mounted at the root, and the http api under /api/v1
+      - 8100:8080
+      # Admin interface is under the http path /admin
+      # https://twitter.github.io/twitter-server/Features.html#http-admin-interface
+      - 9990:9990
