@@ -16,6 +16,19 @@ services:
       - micronet
     command: ["agent", "-server", "-bootstrap-expect=1", "-data-dir=/tmp/consul", "-node=consul1", "-client=0.0.0.0", "-ui"]
 
+  microservice2:
+    image: antifragilesoftware/simple-boot-message-receiving-traceable-zipkin-microservice
+    container_name: microservice2
+    ports:
+       - "8070:8080"
+    depends_on:
+     - consul1
+     - query
+     - web
+    networks:
+      - micronet
+    command: ["java","--spring.cloud.consul.host=consul1","-Djava.security.egd=file:/dev/./urandom","-jar","/microservice.jar"]
+
   microservice1:
     image: antifragilesoftware/simple-boot-message-sending-traceable-zipkin-microservice
     container_name: microservice1
@@ -81,3 +94,19 @@ services:
       # Admin interface is under the http path /admin
       # https://twitter.github.io/twitter-server/Features.html#http-admin-interface
       - 9990:9990
+
+  rabbit1:
+    image: "rabbitmq:3-management"
+    hostname: "rabbit1"
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "SWQOKODSQALRPCLNMEQG"
+      RABBITMQ_DEFAULT_USER: "rabbitmq"
+      RABBITMQ_DEFAULT_PASS: "rabbitmq"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    labels:
+      NAME: "rabbitmq1"
+    networks:
+      - micronet
